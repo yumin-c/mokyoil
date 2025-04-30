@@ -1,91 +1,77 @@
+// ExerciseView.swift
 import SwiftUI
 
 struct ExerciseView: View {
-    @StateObject private var session = ExerciseSession()
+    @StateObject private var motionManager = MotionManager()
+    @StateObject private var soundEngine = SpatialSoundEngine()
+    @StateObject private var session: SoundSessionManager
+
+    init() {
+        let motion = MotionManager()
+        let sound = SpatialSoundEngine()
+        _motionManager = StateObject(wrappedValue: motion)
+        _soundEngine = StateObject(wrappedValue: sound)
+        _session = StateObject(wrappedValue: SoundSessionManager(motionManager: motion, soundEngine: sound))
+    }
 
     var body: some View {
-        VStack {
-            Text(session.statusText)
+        VStack(spacing: 20) {
+            Text("🎧 방향 반응 훈련").font(.title)
+
+            Text("남은 시간: \(session.timeRemaining)s")
+            Text("점수: \(session.score)")
+
+            VStack(spacing: 4) {
+                Text(String(format: "Yaw: %.1f°", motionManager.relativeYaw()))
+                Text(String(format: "Pitch: %.1f°", motionManager.relativePitch()))
+            }
+            .font(.caption)
+
+            if session.isRunning {
+                VStack(spacing: 4) {
+                    Text("🎯 목표 Yaw: \(Int(session.currentTargetYaw))°")
+                    Text("🎯 목표 Pitch: \(Int(session.currentTargetPitch))°")
+                }
+                .foregroundColor(.orange)
+                .font(.headline)
+            }
+
+            Spacer()
+
+            if !session.isRunning {
+                Button("🚀 시작하기") {
+                    session.startSession()
+                }
                 .font(.title2)
-                .fontWeight(.semibold)
-                .padding(.top, 40)
+                .padding()
+                .background(Color.green)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
 
-            Spacer()
-
-            ZStack {
-                // 💠 이상 경로 (ideal path)
-                Path { path in
-                    let now = Date().timeIntervalSinceReferenceDate
-                    let points = stride(from: now - 2.0, through: now, by: 0.05).map { t in
-                        let ideal = idealDirectionVector(at: t)
-                        let x = CGFloat(ideal.x)
-                        let y = CGFloat(ideal.y)
-                        let norm = sqrt(x*x + y*y)
-                        return CGPoint(x: x / norm * 100, y: y / norm * 100)
+            if !session.isRunning && session.timeRemaining < 60 {
+                VStack(spacing: 4) {
+                    Text("세션 종료!").font(.title2)
+                    Text("총 반응 횟수: \(session.reactionTimes.count)")
+                    if let best = session.reactionTimes.min() {
+                        Text(String(format: "최고 반응 속도: %.2f초", best))
                     }
-
-                    guard let first = points.first else { return }
-                    path.move(to: convertToCenter(first))
-                    for point in points {
-                        path.addLine(to: convertToCenter(point))
+                    if let avg = session.reactionTimes.average() {
+                        Text(String(format: "평균 반응 속도: %.2f초", avg))
                     }
-                }
-                .stroke(style: StrokeStyle(lineWidth: 1, dash: [4]))
-                .foregroundColor(.blue.opacity(0.4))
-
-                // 🟢 실제 경로 (센서 기반)
-                Path { path in
-                    guard let first = session.pathPoints.first else { return }
-                    path.move(to: convertToCenter(first))
-                    for point in session.pathPoints {
-                        path.addLine(to: convertToCenter(point))
-                    }
-                }
-                .stroke(Color.green, lineWidth: 2)
-
-                // 🔵 현재 위치
-                if let last = session.pathPoints.last {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 12, height: 12)
-                        .position(convertToCenter(last))
                 }
             }
-            .frame(width: 240, height: 240)
 
             Spacer()
-
-            VStack(spacing: 8) {
-                Text("⏱ 남은 시간: \(session.remainingTime)s")
-                Text("🔄 회전 수: \(session.roundCount)/\(session.goalCount)")
-                Text("📈 유연성 점수: \(session.score)점")
-
-                Button(action: {
-                    session.start()
-                }) {
-                    Text(session.isRunning ? "운동 중..." : "운동 시작")
-                        .fontWeight(.bold)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(session.isRunning ? Color.gray : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-                .disabled(session.isRunning)
-            }
-            .padding()
         }
         .padding()
     }
-
-    // 중심 정렬용 좌표 보정
-    private func convertToCenter(_ point: CGPoint) -> CGPoint {
-        let centerX: CGFloat = 120
-        let centerY: CGFloat = 120
-        return CGPoint(x: centerX + point.x, y: centerY - point.y)
-    }
 }
 
-#Preview {
-    ExerciseView()
+extension Array where Element == Double {
+    func average() -> Double? {
+        guard !isEmpty else { return nil }
+        let total = reduce(0, +)
+        return total / Double(count)
+    }
 }

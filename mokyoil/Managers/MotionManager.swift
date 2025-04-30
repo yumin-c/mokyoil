@@ -1,35 +1,54 @@
+// MotionManager.swift
 import Foundation
 import CoreMotion
 import Combine
-import simd
 
 class MotionManager: ObservableObject {
     private let manager = CMHeadphoneMotionManager()
-    private var updateInterval: TimeInterval = 1.0 / 60.0
+    @Published var yaw: Double = 0.0
+    @Published var pitch: Double = 0.0
+    @Published var roll: Double = 0.0
+    @Published var isAvailable: Bool = false
 
-    @Published var directionVector: SIMD3<Double> = SIMD3<Double>(0, 0, -1)
+    private(set) var referenceYaw: Double = 0.0
+    private(set) var referencePitch: Double = 0.0
 
     func startUpdates() {
-        guard manager.isDeviceMotionAvailable else {
-            print("❗️AirPods 모션 데이터 사용 불가")
-            return
-        }
+        isAvailable = manager.isDeviceMotionAvailable
+        guard isAvailable else { return }
 
-        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
-            guard let self = self, let motion = motion else {
-                if let error = error {
-                    print("Motion error: \(error.localizedDescription)")
-                }
-                return
-            }
+        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+            guard let self = self, let motion = motion else { return }
 
-            let rotationMatrix = motion.attitude.rotationMatrix
-            let forward = SIMD3<Double>(rotationMatrix.m31, rotationMatrix.m32, rotationMatrix.m33)
-            self.directionVector = forward
+            self.yaw = motion.attitude.yaw * 180 / .pi
+            self.pitch = motion.attitude.pitch * 180 / .pi
+            self.roll = motion.attitude.roll * 180 / .pi
         }
     }
 
     func stopUpdates() {
         manager.stopDeviceMotionUpdates()
+    }
+
+    func calibrateReference() {
+        referenceYaw = yaw
+        referencePitch = pitch
+    }
+
+    func relativeYaw() -> Double {
+        var delta = yaw - referenceYaw
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        return delta
+    }
+
+    func relativePitch() -> Double {
+        return pitch - referencePitch
+    }
+
+    func angularDistance(to targetYaw: Double, targetPitch: Double) -> Double {
+        let dyaw = relativeYaw() - targetYaw
+        let dpitch = relativePitch() - targetPitch
+        return sqrt(dyaw * dyaw + dpitch * dpitch)
     }
 }
