@@ -56,6 +56,8 @@ class SoundSessionManager: ObservableObject {
 
         currentTargetYaw = Double.random(in: -95...95)
         currentTargetPitch = Double.random(in: -45...45)
+        
+        
         soundEngine.playPing(atYaw: currentTargetYaw, pitch: currentTargetPitch)
         soundStartTime = Date()
 
