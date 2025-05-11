@@ -37,8 +37,17 @@ struct ExerciseView: View {
             }
 
             Spacer()
-
-            if !session.isRunning {
+            
+            if session.isRunning {
+                Button("🛑 종료하기") {
+                    session.endSession()
+                }
+                .font(.title2)
+                .padding()
+                .background(Color.green)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            } else {
                 Button("🚀 시작하기") {
                     session.startSession()
                 }

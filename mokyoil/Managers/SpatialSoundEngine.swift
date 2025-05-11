@@ -1,4 +1,6 @@
 // SpatialSoundEngine.swift
+// 02:24, May 11 2025 -> 지금 오디오 방향성은 되는데, spatial audio 기능 통합해서 고정된 방향에서 들리도록 해야함
+
 import Foundation
 import AVFoundation
 
@@ -10,26 +12,37 @@ class SpatialSoundEngine: ObservableObject {
     private var isPlaying = false
 
     init() {
+        // AVAudioSession 설정 (선택사항이지만 권장)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.allowBluetooth])
+
         engine.attach(environment)
         engine.attach(player)
 
-        engine.connect(player, to: environment, format: nil)
-        engine.connect(environment, to: engine.mainMixerNode, format: nil)
+        // 환경 노드를 메인 믹서에 연결
+        let stereoFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)
+        engine.connect(environment, to: engine.mainMixerNode, format: stereoFormat)
+
+        // 오디오 파일 로딩
+        if let url = Bundle.main.url(forResource: "find-my-sound", withExtension: "mp3") {
+            do {
+                audioFile = try AVAudioFile(forReading: url)
+
+                // mono 형식으로 플레이어 노드 연결
+                let monoFormat = AVAudioFormat(standardFormatWithSampleRate: audioFile!.processingFormat.sampleRate, channels: 1)
+                engine.connect(player, to: environment, format: monoFormat)
+
+            } catch {
+                print("❗️오디오 파일 로딩 실패: \(error.localizedDescription)")
+            }
+        }
 
         environment.listenerPosition = AVAudio3DPoint(x: 0, y: 0, z: 0)
+        environment.renderingAlgorithm = .HRTFHQ
 
         do {
             try engine.start()
         } catch {
             print("❗️오디오 엔진 시작 실패: \(error.localizedDescription)")
-        }
-
-        if let url = Bundle.main.url(forResource: "ping", withExtension: "mp3") {
-            do {
-                audioFile = try AVAudioFile(forReading: url)
-            } catch {
-                print("❗️기본 사운드 로딩 실패: \(error.localizedDescription)")
-            }
         }
     }
 
@@ -44,23 +57,18 @@ class SpatialSoundEngine: ObservableObject {
         let z = 2 * sin(radiansPitch)
 
         let position = AVAudio3DPoint(x: Float(x), y: Float(y), z: Float(z))
+
+        // 방향 설정
         player.position = position
+        player.pointSourceInHeadMode = .mono
+        player.renderingAlgorithm = .HRTFHQ
 
-        if !isPlaying {
-            isPlaying = true
-            player.scheduleFile(audioFile, at: nil, completionHandler: { [weak self] in
-                self?.isPlaying = false
-            })
-            engine.prepare()
-            try? engine.start()
-            engine.attach(player)
-            player.play()
-
-            // 5초간 반복 재생
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                self.stop()
-            }
-        }
+        player.stop()
+        player.scheduleFile(audioFile, at: nil, completionHandler: { [weak self] in
+            self?.isPlaying = false
+        })
+        player.play()
+        isPlaying = true
     }
 
     func stop() {
@@ -76,3 +84,8 @@ class SpatialSoundEngine: ObservableObject {
         )
     }
 }
+
+
+
+
+
